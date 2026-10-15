@@ -20,6 +20,7 @@ fn main() {
                 "activate_device",
                 "get_local_session",
                 "staff_logout",
+                "deactivate_device",
                 "sync_now",
                 "get_sync_status",
                 "get_cached_data",

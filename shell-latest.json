@@ -1,0 +1,11 @@
+{
+  "version": "1.0.1",
+  "notes": "Release 1.0.1",
+  "pub_date": "2026-10-10T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRbXY2NE9xU3JMeW0rQjQ1cDdscGNTL2pESjlkUGtVVkpicUo4eDlHSU5sQVNkYldJUkRFZnE4cVRTZ3BOQnc2c25DOEY5R3M0Sm84Ri9VNjl2UW81a0EvREUrZVV5Tnc4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNjIwNTEzCWZpbGU6UmVzdHJvIFByb18xLjAuMV94NjQtc2V0dXAuZXhlCXZlcnNpb246MS4wLjEKNWRjaldXY1Vsd3RpNVNacUJQampIL2hETnE4Rm1WMWVqdG4zM1J4aHZGeVZlZzhvYnZ0QjJNQUZKOGcvaThucHdqNUYzS3k3YnpIYnVwYnBvcEFTQVE9PQo=",
+      "url": "https://github.com/osamamalikawan/restropro-desk/releases/download/v1.0.1/Restro Pro_1.0.1_x64-setup.exe"
+    }
+  }
+}

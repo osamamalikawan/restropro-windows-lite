@@ -303,12 +303,17 @@ fn main() {
             let base = bundle_updater::current_bundle_path();
 
             let Some(base) = base else {
+                let mut msg = String::from(
+                    "No app bundle downloaded yet \u{2014} connect to the internet once to finish setup.",
+                );
+                if let Some(err) = bundle_updater::last_error() {
+                    msg.push_str("\n\nLast error: ");
+                    msg.push_str(&err);
+                }
                 return tauri::http::Response::builder()
                     .status(503)
-                    .body(
-                        b"No app bundle downloaded yet \xe2\x80\x94 connect to the internet once to finish setup."
-                            .to_vec(),
-                    )
+                    .header("Content-Type", "text/plain; charset=utf-8")
+                    .body(msg.into_bytes())
                     .unwrap();
             };
 
@@ -368,24 +373,39 @@ fn main() {
             let handle = app.handle().clone();
 
             std::thread::spawn(move || {
-                let result = bundle_updater::check_and_update();
+                // Retry until a bundle exists, so first run on a flaky connection (or a
+                // transient failure) fixes itself instead of leaving the 503 page forever.
+                let mut shown = false;
+                loop {
+                    let result = bundle_updater::check_and_update();
+                    let had_bundle = bundle_updater::current_bundle_path().is_some();
 
-                match &result {
-                    Ok(Some(v)) => println!("Updated bundle to {v}"),
-                    Ok(None) => println!("Bundle already current"),
-                    Err(e) => {
-                        eprintln!(
-                            "Update check failed (using cached bundle if any): {e}"
-                        )
+                    match &result {
+                        Ok(Some(v)) => println!("Updated bundle to {v}"),
+                        Ok(None) => println!("Bundle already current"),
+                        Err(e) => {
+                            eprintln!("Update check failed (using cached bundle if any): {e}");
+                            if !had_bundle {
+                                // Surface the real reason instead of a generic message.
+                                bundle_updater::set_last_error(e.clone());
+                            }
+                        }
                     }
-                }
 
-                if let Some(window) = handle.get_webview_window("main") {
-                    if bundle_updater::current_bundle_path().is_some() {
-                        let _ = window.eval("window.location.reload()");
+                    if let Some(window) = handle.get_webview_window("main") {
+                        if had_bundle {
+                            let _ = window.eval("window.location.reload()");
+                        }
+                        if !shown {
+                            let _ = window.show();
+                            shown = true;
+                        }
                     }
 
-                    let _ = window.show();
+                    if had_bundle {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_secs(30));
                 }
             });
 
@@ -466,6 +486,7 @@ fn main() {
             staff_auth::activate_device,
             staff_auth::get_local_session,
             staff_auth::staff_logout,
+            staff_auth::deactivate_device,
             sync::sync_now,
             sync::get_sync_status,
             sync::get_cached_data,

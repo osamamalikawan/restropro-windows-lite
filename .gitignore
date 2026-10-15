@@ -10,3 +10,7 @@ target/
 .env.local
 
 .archify/
+# signing keys must never be committed
+~/
+*.key
+.tauri/

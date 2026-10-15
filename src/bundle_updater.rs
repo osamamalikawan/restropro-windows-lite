@@ -5,6 +5,18 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 const MANIFEST_URL: &str = "https://github.com/osamamalikawan/restropro/releases/latest/download/latest.json";
+static LAST_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn set_last_error(e: String) {
+    if let Ok(mut g) = LAST_ERROR.lock() {
+        *g = Some(e);
+    }
+}
+
+pub fn last_error() -> Option<String> {
+    LAST_ERROR.lock().ok().and_then(|g| g.clone())
+}
+
 const SHELL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Deserialize)]

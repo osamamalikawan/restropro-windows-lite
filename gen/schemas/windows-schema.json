@@ -213,6 +213,12 @@
           "markdownDescription": "Enables the create_local_sale command without any pre-configured scope."
         },
         {
+          "description": "Enables the deactivate_device command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-deactivate-device",
+          "markdownDescription": "Enables the deactivate_device command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_cached_data command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-cached-data",
@@ -379,6 +385,12 @@
           "type": "string",
           "const": "deny-create-local-sale",
           "markdownDescription": "Denies the create_local_sale command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the deactivate_device command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-deactivate-device",
+          "markdownDescription": "Denies the deactivate_device command without any pre-configured scope."
         },
         {
           "description": "Denies the get_cached_data command without any pre-configured scope.",

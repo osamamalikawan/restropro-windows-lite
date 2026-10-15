@@ -27,6 +27,7 @@
     "allow-activate-device",
     "allow-get-local-session",
     "allow-staff-logout",
+    "allow-deactivate-device",
     "allow-sync-now",
     "allow-get-sync-status",
     "allow-get-cached-data",

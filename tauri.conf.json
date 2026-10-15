@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.restropro.pos",
   "build": {
-    "frontendDist": "https://restropro-eta.vercel.app"
+    "frontendDist": "restropro-lite.vercel.app"
   },
   "app": {
     "withGlobalTauri": true,
@@ -40,9 +40,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MzMyRTkxRUYwMUU0MzkKUldRNTVBSHZrUzR6eUU4ZkVGMlRhV0ZES0l4YWdLOHVlWkp5cmxsTlJ4K0N3eEpEcmJLblE1NGMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBQ0IyQUE5MEVBRUJGMjYKUldRbXY2NE9xU3JMeXVqenNRU2k2bXFZRDhZWnN5MVlQNUJnb0tFcEVxVWRkbWx6M2lkeGsrS2oK",
       "endpoints": [
-        "https://github.com/osamamalikawan/restropro-desk/releases/latest/download/shell-latest.json"
+        "https://github.com/osamamalikawan/restropro-windows-lite/releases/latest/download/shell-latest.json"
       ]
     }
   }

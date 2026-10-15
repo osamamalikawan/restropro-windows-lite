@@ -1,6 +1,6 @@
 [package]
 name = "restropro"
-version = "1.0.0"
+version = "1.0.1"
 description = "Restro Pro POS — desktop shell with direct network thermal printer support"
 edition = "2021"
 
