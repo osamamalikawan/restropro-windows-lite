@@ -3,17 +3,19 @@
 //! id of the cashier signed in on the device (PIN checked locally). Server-side, each request is
 //! re-authorised from the database (employee active + role + same restaurant + device not revoked).
 //!
-//! Offline: the screens that must keep working (Ticket Rail, Sales, Unpaid Orders) are answered
-//! from this device — see offline_api.rs. Everything else fails fast with a network error, which
-//! the app shows as the "You're offline" page, instead of hanging.
+//! Offline: Sales and the POS are answered from this device (offline_api.rs). Every other lite screen
+//! (Dashboard, Menu, Expenses, Accounts, Settings, Notifications) shows the last data the cloud sent
+//! (read cache), and changes made there are queued and uploaded when the cloud answers again
+//! (offline_cache.rs). Anything else fails fast with a network error instead of hanging.
 
 use crate::local_db::Db;
 use crate::offline_api as offline;
+use crate::offline_cache as oc;
 use crate::staff_auth::SessionState;
 use crate::sync::API_BASE;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
@@ -70,17 +72,26 @@ enum NetError {
 }
 
 fn http(app: &AppHandle, method: &reqwest::Method, path: &str, body: Option<&str>, content_type: Option<&str>) -> Result<ApiReply, NetError> {
+    http_as(app, None, method, path, body, content_type)
+}
+
+/// `as_employee`: act for this cashier (an offline change is uploaded as whoever made it, whoever is
+/// signed in by then). None = the cashier signed in right now.
+fn http_as(app: &AppHandle, as_employee: Option<String>, method: &reqwest::Method, path: &str, body: Option<&str>, content_type: Option<&str>) -> Result<ApiReply, NetError> {
     let token = crate::secure_store::secure_get("device_token".to_string())
         .map_err(NetError::Local)?
         .ok_or_else(|| NetError::Local("This device is not activated yet".to_string()))?;
-    let employee_id = app
-        .state::<SessionState>()
-        .0
-        .lock()
-        .map_err(|e| NetError::Local(e.to_string()))?
-        .as_ref()
-        .map(|s| s.employee_id.clone())
-        .ok_or_else(|| NetError::Local("Not signed in".to_string()))?;
+    let employee_id = match as_employee {
+        Some(id) => id,
+        None => app
+            .state::<SessionState>()
+            .0
+            .lock()
+            .map_err(|e| NetError::Local(e.to_string()))?
+            .as_ref()
+            .map(|s| s.employee_id.clone())
+            .ok_or_else(|| NetError::Local("Not signed in".to_string()))?,
+    };
 
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(4))
@@ -189,9 +200,98 @@ fn kitchen_status(app: &AppHandle, db: &Db, path: &str, body: Option<String>, co
     }
 }
 
+/// The cashier signed in on this device, if any.
+fn current_employee(app: &AppHandle) -> Option<String> {
+    app.state::<SessionState>().0.lock().ok()?.as_ref().map(|s| s.employee_id.clone())
+}
+
+fn has_pending_changes(db: &Db) -> bool {
+    db.0.lock().map(|c| oc::pending_count(&c) > 0).unwrap_or(false)
+}
+
+/// Upload the changes made offline, oldest first. Stops quietly at the first sign the cloud can't be
+/// reached (they stay queued). A change the server refuses is kept as "rejected" with the reason.
+pub fn replay_queue(app: &AppHandle) {
+    let db = app.state::<Db>();
+    let mut uploaded_any = false;
+    loop {
+        let next = match db.0.lock() {
+            Ok(conn) => oc::next_pending(&conn),
+            Err(_) => return,
+        };
+        let Some(p) = next else { break };
+        let method = reqwest::Method::from_bytes(p.method.as_bytes()).unwrap_or(reqwest::Method::POST);
+        match http_as(app, p.employee_id.clone(), &method, &p.path, Some(&p.body), None) {
+            Ok(reply) => {
+                mark_ok();
+                let Ok(conn) = db.0.lock() else { return };
+                if (200..300).contains(&reply.status) {
+                    oc::finish(&conn, p.seq, None);
+                    uploaded_any = true;
+                } else if reply.status == 401 || reply.status >= 500 {
+                    break; // not the change's fault: try again later
+                } else {
+                    let why = serde_json::from_str::<Value>(&reply.body)
+                        .ok()
+                        .and_then(|v| v["error"].as_str().map(str::to_string))
+                        .unwrap_or_else(|| format!("HTTP {}", reply.status));
+                    oc::finish(&conn, p.seq, Some(&why));
+                }
+            }
+            Err(NetError::Offline(_)) => {
+                mark_failed();
+                break;
+            }
+            Err(NetError::Local(_)) => break,
+        }
+    }
+    if let Ok(conn) = db.0.lock() {
+        if let Some(msg) = oc::rejected_summary(&conn) {
+            let _ = conn.execute("UPDATE sync_state SET last_error = ?1 WHERE id = 1", [msg]);
+        }
+    }
+    if uploaded_any {
+        LAST_WARM.store(0, Ordering::Relaxed); // the server now has new data: refresh the saved copies soon
+    }
+}
+
+/// Fetch every screen's default data in the background (at most every 15 minutes) so each one has a
+/// saved copy for offline use, including screens never opened while online.
+static LAST_WARM: AtomicI64 = AtomicI64::new(0);
+static WARMING: AtomicBool = AtomicBool::new(false);
+const WARM_EVERY_MS: i64 = 15 * 60 * 1000;
+
+fn maybe_warm(app: &AppHandle) {
+    if now_ms() - LAST_WARM.load(Ordering::Relaxed) < WARM_EVERY_MS || WARMING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    LAST_WARM.store(now_ms(), Ordering::Relaxed);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for path in oc::warm_paths() {
+            if recently_failed() {
+                break;
+            }
+            if let Ok(reply) = try_http(&app, &reqwest::Method::GET, &path, None, None) {
+                if reply.status == 200 {
+                    if let Ok(conn) = app.state::<Db>().0.lock() {
+                        oc::store_get(&conn, &path, &reply.body);
+                    }
+                }
+            }
+        }
+        WARMING.store(false, Ordering::SeqCst);
+    });
+}
+
 fn handle(app: AppHandle, method: reqwest::Method, path: String, body: Option<String>, content_type: Option<String>) -> Result<ApiReply, String> {
     let db = app.state::<Db>();
     let (base, qp) = offline::split_path(&path);
+
+    // Changes made offline go up before anything else is asked of the server.
+    if !recently_failed() && has_pending_changes(&db) {
+        replay_queue(&app);
+    }
 
     if method == reqwest::Method::POST && base == "/api/sales/kitchen-status" {
         return kitchen_status(&app, &db, &path, body, content_type);
@@ -208,8 +308,15 @@ fn handle(app: AppHandle, method: reqwest::Method, path: String, body: Option<St
     };
 
     let local_get = method == reqwest::Method::GET && offline::is_local_capable_get(&path);
+    let cacheable = method == reqwest::Method::GET && oc::cacheable_get(base);
     match try_http(&app, &method, &path, body.as_deref(), content_type.as_deref()) {
         Ok(mut reply) => {
+            if cacheable && reply.status == 200 {
+                if let Ok(conn) = db.0.lock() {
+                    oc::store_get(&conn, &path, &reply.body);
+                }
+            }
+            maybe_warm(&app);
             if local_get && reply.status == 200 && base == "/api/sales" {
                 if let Ok(conn) = db.0.lock() {
                     if let Some(adjusted) = offline::adjust_online_sales(&conn, &reply.body, &qp) {
@@ -225,6 +332,20 @@ fn handle(app: AppHandle, method: reqwest::Method, path: String, body: Option<St
                 if let Some(v) = offline::serve_get_local(&conn, &path) {
                     return Ok(json_reply(200, v));
                 }
+            }
+            if cacheable {
+                let conn = db.0.lock().map_err(|e| e.to_string())?;
+                if let Some(saved) = oc::lookup_get(&conn, &path) {
+                    return Ok(ApiReply { status: 200, content_type: Some("application/json".to_string()), body: saved });
+                }
+            }
+            if oc::queueable_write(method.as_str(), base) {
+                let employee = current_employee(&app);
+                let conn = db.0.lock().map_err(|e| e.to_string())?;
+                return Ok(match oc::queue_write(&conn, method.as_str(), &path, body.as_deref().unwrap_or(""), employee.as_deref()) {
+                    Ok(v) => json_reply(200, v),
+                    Err(m) => json_reply(400, json!({ "error": m })),
+                });
             }
             Err(msg)
         }

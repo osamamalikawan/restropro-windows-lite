@@ -4,7 +4,7 @@ use std::sync::Mutex;
 pub struct Db(pub Mutex<Connection>);
 
 fn db_path() -> std::path::PathBuf {
-    dirs::data_dir().unwrap().join("restropro").join("local.db")
+    dirs::data_dir().unwrap().join("restropro-lite").join("local.db")
 }
 
 pub fn init() -> Db {
@@ -67,6 +67,8 @@ pub fn init() -> Db {
         ",
     )
     .expect("failed to initialize local database schema");
+    // Read cache + queued changes for the Dashboard / Menu / Expenses / Accounts / Settings / Notifications screens.
+    crate::offline_cache::init(&conn).expect("failed to initialize the offline cache tables");
     // Added after the first release: the server's id of an uploaded sale (so Ticket Rail moves made
     // while it was only on this device can be applied to it). SQLite has no "ADD COLUMN IF NOT
     // EXISTS", so a "duplicate column" error on later starts is expected and ignored.

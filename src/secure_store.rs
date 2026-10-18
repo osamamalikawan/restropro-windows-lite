@@ -1,7 +1,7 @@
 // src-tauri/src/secure_store.rs
 use keyring::Entry;
 
-const SERVICE: &str = "restropro-desktop";
+const SERVICE: &str = "restropro-lite-desktop";
 
 fn entry(key: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, key).map_err(|e| e.to_string())

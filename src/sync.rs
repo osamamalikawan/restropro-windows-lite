@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
-pub const API_BASE: &str = "https://restropro-eta.vercel.app";
+pub const API_BASE: &str = "https://restropro-lite.vercel.app";
 const MAX_OFFLINE_HOURS: i64 = 72;
 const CLOCK_ROLLBACK_TOLERANCE_MINUTES: i64 = 5;
 const BACKGROUND_SNAPSHOT_EVERY_MINUTES: i64 = 30;
@@ -358,6 +358,9 @@ pub fn run_sync(app: &AppHandle, retry_rejected: bool, force_snapshot: bool) -> 
     let _guard = SyncGuard;
     let db = app.state::<Db>();
 
+    // Changes made offline on the other screens go up first, so the snapshot below can't overwrite them.
+    crate::api_bridge::replay_queue(app);
+
     match do_sync(&db, retry_rejected, force_snapshot) {
         Err((msg, revoked)) => {
             set_last_error(&db, &msg, revoked);
@@ -366,7 +369,9 @@ pub fn run_sync(app: &AppHandle, retry_rejected: bool, force_snapshot: bool) -> 
         Ok(Some(note)) => set_last_error(&db, &note, false),
         Ok(None) => {
             if let Ok(conn) = db.0.lock() {
-                let _ = conn.execute("UPDATE sync_state SET last_error = NULL WHERE id = 1", []);
+                // Keep telling the user about offline changes the server refused, until they age out.
+                let note = crate::offline_cache::rejected_summary(&conn);
+                let _ = conn.execute("UPDATE sync_state SET last_error = ?1 WHERE id = 1", [note]);
             }
         }
     }

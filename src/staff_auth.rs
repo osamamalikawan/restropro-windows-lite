@@ -129,7 +129,7 @@ pub fn staff_logout(session: State<SessionState>) -> Result<(), String> {
     Ok(())
 }
 
-const ACTIVATE_URL: &str = "https://restropro-eta.vercel.app/api/device/activate";
+const ACTIVATE_URL: &str = "https://restropro-lite.vercel.app/api/device/activate";
 
 #[derive(Deserialize)]
 struct ActivateResponse {

@@ -27,6 +27,7 @@ mod secure_store;
 mod bundle_updater;
 mod local_db;
 mod offline_api;
+mod offline_cache;
 mod staff_auth;
 mod sync;
 mod api_bridge;

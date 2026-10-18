@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const MANIFEST_URL: &str = "https://github.com/osamamalikawan/restropro/releases/latest/download/latest.json";
+const MANIFEST_URL: &str = "https://github.com/osamamalikawan/restropro-lite/releases/latest/download/latest.json";
 static LAST_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 pub fn set_last_error(e: String) {
@@ -28,11 +28,11 @@ struct Manifest {
 }
 
 fn base_dir() -> PathBuf {
-    dirs::data_dir().unwrap().join("restropro").join("versions")
+    dirs::data_dir().unwrap().join("restropro-lite").join("versions")
 }
 
 fn current_pointer() -> PathBuf {
-    dirs::data_dir().unwrap().join("restropro").join("current.txt")
+    dirs::data_dir().unwrap().join("restropro-lite").join("current.txt")
 }
 
 pub fn current_bundle_path() -> Option<PathBuf> {
